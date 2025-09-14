@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MobilitySense Dashboard</title>
+    <!-- Tailwind CSS for styling and responsiveness -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.11.0/mapbox-gl.css' rel='stylesheet' />
+    <!-- Chart.js for data visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body, html, #map {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .mapboxgl-marker.circle {
+            border-radius: 50%;
+            background-color: transparent;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .mapboxgl-marker.circle:hover {
+            transform: scale(1.1);
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+
+        .tooltip {
+            background-color: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            position: absolute;
+            z-index: 10;
+            transform: translate(-50%, -120%);
+        }
+
+        .tooltip.show {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center p-4">
+
+    <!-- Dashboard Container -->
+    <div class="relative w-full h-full max-w-7xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col lg:flex-row">
+
+        <!-- Mapbox Map Container -->
+        <div id="map" class="flex-1 rounded-t-2xl lg:rounded-l-2xl lg:rounded-tr-none"></div>
+        
+        <!-- Dashboard Widgets and Controls -->
+        <div class="p-6 lg:w-96 flex flex-col justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">MobilitySense</h1>
+                <p class="text-sm text-gray-500 mt-1">Real-time Density Dashboard</p>
+
+                <!-- Data Legend Section -->
+                <div class="mt-8 space-y-4">
+                    <h2 class="text-xl font-semibold text-gray-700">Data Layers</h2>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 rounded-full bg-red-500"></div>
+                        <span class="text-gray-600">Population Density (Heatmap)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 rounded-full bg-blue-500"></div>
+                        <span class="text-gray-600">Hospital Footfall (Bubbles)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <div class="w-4 h-4 rounded-full bg-green-500"></div>
+                        <span class="text-gray-600">Bus Ridership (Bubbles)</span>
+                    </div>
+                </div>
+
+                <!-- Live Data Display (Placeholder for charts) -->
+                <div class="mt-8">
+                    <h2 class="text-xl font-semibold text-gray-700 mb-4">Live Data Feed</h2>
+                    <div id="chart-container" class="w-full h-40 bg-gray-50 rounded-lg p-4 flex items-center justify-center text-gray-400 text-sm">
+                        <canvas id="ridership-chart"></canvas>
+                        <canvas id="footfall-chart" class="hidden"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer for refresh button -->
+            <div class="mt-6">
+                <button id="refresh-button" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold shadow-lg hover:bg-blue-700 transition duration-300">
+                    Refresh Data
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Mapbox GL JS Library -->
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.11.0/mapbox-gl.js'></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const MAPBOX_ACCESS_TOKEN = "pk.eyJ1Ijoic291amkxMSIsImEiOiJjbWZqaGx5MmkwMXhtMmpzOTBsb2Y3MnQ1In0.lvhoJUUg7bbCAqIANDJbBQ";
+            mapboxgl.accessToken = MAPBOX_ACCESS_TOKEN;
+
+            // Mock Data - Adjusted for a better visual representation
+            const mockData = {
+                trips: {
+                    type: 'FeatureCollection',
+                    features: [
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.28, 9.99] }, "properties": { "id": 1, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.275, 9.985] }, "properties": { "id": 2, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.272, 9.982] }, "properties": { "id": 3, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.27, 9.98] }, "properties": { "id": 4, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.265, 9.987] }, "properties": { "id": 5, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.278, 9.99] }, "properties": { "id": 6, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.28, 9.975] }, "properties": { "id": 7, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.26, 9.99] }, "properties": { "id": 8, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.28, 9.995] }, "properties": { "id": 9, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.275, 9.988] }, "properties": { "id": 10, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.267, 9.981] }, "properties": { "id": 11, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.281, 9.978] }, "properties": { "id": 12, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.273, 9.992] }, "properties": { "id": 13, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.27, 9.97] }, "properties": { "id": 14, "type": "trip" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.265, 9.98] }, "properties": { "id": 15, "type": "trip" } },
+                    ]
+                },
+                ridership: {
+                    type: 'FeatureCollection',
+                    features: [
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.262, 9.98] }, "properties": { "id": 1, "riders": 25, "route": "Bus 1" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.28, 9.988] }, "properties": { "id": 2, "riders": 40, "route": "Bus 2" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.275, 9.975] }, "properties": { "id": 3, "riders": 15, "route": "Bus 3" } },
+                    ]
+                },
+                footfall: {
+                    type: 'FeatureCollection',
+                    features: [
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.27, 9.995] }, "properties": { "id": 1, "in_count": 50, "out_count": 45, "name": "Hospital A" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.285, 9.98] }, "properties": { "id": 2, "in_count": 75, "out_count": 60, "name": "Mall B" } },
+                        { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.278, 9.978] }, "properties": { "id": 3, "in_count": 30, "out_count": 25, "name": "Hospital C" } },
+                    ]
+                }
+            };
+
+            const map = new mapboxgl.Map({
+                container: 'map',
+                style: 'mapbox://styles/mapbox/streets-v11',
+                center: [76.269, 9.981],
+                zoom: 12
+            });
+
+            // Reusable tooltip
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            document.body.appendChild(tooltip);
+
+            const renderVisualizations = () => {
+                if (map.getLayer('trips-heatmap')) map.removeLayer('trips-heatmap');
+                if (map.getSource('trips')) map.removeSource('trips');
+                if (map.getLayer('ridership-bubbles')) map.removeLayer('ridership-bubbles');
+                if (map.getSource('ridership')) map.removeSource('ridership');
+                if (map.getLayer('footfall-bubbles')) map.removeLayer('footfall-bubbles');
+                if (map.getSource('footfall')) map.removeSource('footfall');
+
+                map.addSource('trips', { type: 'geojson', data: mockData.trips });
+                map.addSource('ridership', { type: 'geojson', data: mockData.ridership });
+                map.addSource('footfall', { type: 'geojson', data: mockData.footfall });
+
+                map.addLayer({
+                    id: 'trips-heatmap',
+                    type: 'heatmap',
+                    source: 'trips',
+                    maxzoom: 15,
+                    paint: {
+                        'heatmap-weight': ['get', 'id'],
+                        'heatmap-intensity': 0.8,
+                        'heatmap-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['heatmap-density'],
+                            0, 'rgba(255,100,100,0)',
+                            0.2, 'rgba(255,100,100,0.4)',
+                            0.4, 'rgba(255,100,100,0.6)',
+                            0.6, 'rgba(255,100,100,0.8)',
+                            1, 'rgba(255,100,100,1)'
+                        ],
+                        'heatmap-radius': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            0, 5,
+                            9, 25
+                        ]
+                    }
+                });
+
+                map.addLayer({
+                    id: 'ridership-bubbles',
+                    type: 'circle',
+                    source: 'ridership',
+                    paint: {
+                        'circle-color': '#4CAF50',
+                        'circle-radius': ['*', ['get', 'riders'], 0.5],
+                        'circle-opacity': 0.7
+                    }
+                });
+
+                map.addLayer({
+                    id: 'footfall-bubbles',
+                    type: 'circle',
+                    source: 'footfall',
+                    paint: {
+                        'circle-color': '#2196F3',
+                        'circle-radius': ['*', ['get', 'in_count'], 0.2],
+                        'circle-opacity': 0.7
+                    }
+                });
+
+                // Add popups for the circles
+                map.on('mouseenter', 'ridership-bubbles', (e) => {
+                    map.getCanvas().style.cursor = 'pointer';
+                    const coordinates = e.features[0].geometry.coordinates.slice();
+                    const props = e.features[0].properties;
+                    tooltip.innerHTML = `**${props.route}**<br>Riders: ${props.riders}`;
+                    tooltip.style.left = e.originalEvent.clientX + 'px';
+                    tooltip.style.top = e.originalEvent.clientY + 'px';
+                    tooltip.classList.add('show');
+                });
+                map.on('mouseleave', 'ridership-bubbles', () => {
+                    map.getCanvas().style.cursor = '';
+                    tooltip.classList.remove('show');
+                });
+
+                map.on('mouseenter', 'footfall-bubbles', (e) => {
+                    map.getCanvas().style.cursor = 'pointer';
+                    const coordinates = e.features[0].geometry.coordinates.slice();
+                    const props = e.features[0].properties;
+                    tooltip.innerHTML = `**${props.name}**<br>Footfall: ${props.in_count}`;
+                    tooltip.style.left = e.originalEvent.clientX + 'px';
+                    tooltip.style.top = e.originalEvent.clientY + 'px';
+                    tooltip.classList.add('show');
+                });
+                map.on('mouseleave', 'footfall-bubbles', () => {
+                    map.getCanvas().style.cursor = '';
+                    tooltip.classList.remove('show');
+                });
+            };
+
+            const createCharts = () => {
+                const ridershipCtx = document.getElementById('ridership-chart').getContext('2d');
+                const ridershipLabels = mockData.ridership.features.map(f => f.properties.route);
+                const ridershipData = mockData.ridership.features.map(f => f.properties.riders);
+                new Chart(ridershipCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ridershipLabels,
+                        datasets: [{
+                            label: 'Bus Ridership',
+                            data: ridershipData,
+                            backgroundColor: '#4CAF50',
+                            borderColor: '#388E3C',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+
+                const footfallCtx = document.getElementById('footfall-chart').getContext('2d');
+                const footfallLabels = mockData.footfall.features.map(f => f.properties.name);
+                const footfallData = mockData.footfall.features.map(f => f.properties.in_count);
+                new Chart(footfallCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: footfallLabels,
+                        datasets: [{
+                            label: 'Hospital & Mall Footfall',
+                            data: footfallData,
+                            backgroundColor: ['#2196F3', '#FFC107'],
+                            borderColor: '#FFFFFF',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom' } }
+                    }
+                });
+            };
+
+            map.on('load', () => {
+                renderVisualizations();
+                createCharts();
+            });
+
+            document.getElementById('refresh-button').addEventListener('click', () => {
+                const newTrip = { "type": "Feature", "geometry": { "type": "Point", "coordinates": [76.285 + Math.random() * 0.01, 9.97 + Math.random() * 0.01] }, "properties": { "id": mockData.trips.features.length + 1, "type": "trip" } };
+                mockData.trips.features.push(newTrip);
+
+                renderVisualizations();
+                alert('Data refreshed! A new trip has been added to the map.');
+            });
+        });
+    </script>
+</body>
+</html>
